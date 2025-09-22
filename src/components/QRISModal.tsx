@@ -8,6 +8,7 @@ import {
   Image,
   ActivityIndicator,
 } from "react-native";
+import { validatePayment } from "../services/payments";
 
 type Props = {
   visible: boolean;
@@ -26,6 +27,7 @@ export default function QRISModal({
   const [BarcodeModule, setBarcodeModule] = React.useState<any | null>(null);
   const [QRCode, setQRCode] = React.useState<any | null>(null);
   const [svgAvailable, setSvgAvailable] = React.useState<boolean>(false);
+  const [showQRCode, setShowQRCode] = React.useState<boolean>(false);
 
   const [hasPermission, setHasPermission] = React.useState<boolean | null>(
     null
@@ -34,9 +36,10 @@ export default function QRISModal({
   const [showCamera, setShowCamera] = React.useState(false);
   const [loadingScanner, setLoadingScanner] = React.useState(false);
 
-  // load QRCode library once (safe, JS-only)
+  // load QRCode library only when the user requests to view the QR
   React.useEffect(() => {
     let mounted = true;
+    if (!showQRCode) return;
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const QR = require("react-native-qrcode-svg").default;
@@ -55,7 +58,7 @@ export default function QRISModal({
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [showQRCode]);
 
   // When the user explicitly asks to open the camera scanner, try to load
   // the native scanner module and request permission. This avoids requiring
@@ -100,13 +103,22 @@ export default function QRISModal({
     setScanned(true);
     // event.data contains the scanned string
     // guard against null event
-    try {
-      const data = event && (event as any).data ? (event as any).data : null;
-      // you could validate `data` here before calling onSuccess
-    } catch (e) {
-      // ignore
-    }
-    onSuccess();
+    const data = event && (event as any).data ? (event as any).data : null;
+    (async () => {
+      if (!data) {
+        // nothing scanned
+        return;
+      }
+      // validate scanned payload with payments service
+      const res = await validatePayment(data);
+      if (res.ok) {
+        onSuccess();
+      } else {
+        // show a simple alert fallback
+        // eslint-disable-next-line no-alert
+        alert(res.message || "Payment validation failed");
+      }
+    })();
   };
 
   const effectivePayload = payload || "payment://qris/123456";
@@ -168,13 +180,37 @@ export default function QRISModal({
                     </Text>
                   </View>
                 )
-              ) : QRCode && svgAvailable ? (
-                <QRCode value={effectivePayload} size={160} />
+              ) : showQRCode ? (
+                QRCode && svgAvailable ? (
+                  <QRCode value={effectivePayload} size={160} />
+                ) : (
+                  <Image
+                    source={require("../../assets/banner_ads.png")}
+                    style={{ width: 160, height: 160 }}
+                  />
+                )
               ) : (
-                <Image
-                  source={require("../../assets/banner_ads.png")}
-                  style={{ width: 160, height: 160 }}
-                />
+                <View style={{ flexDirection: "row", gap: 8 }}>
+                  <TouchableOpacity
+                    style={styles.openCameraBtn}
+                    onPress={() => {
+                      setScanned(false);
+                      setShowCamera(true);
+                    }}
+                  >
+                    <Text style={{ color: "#0f172a", fontWeight: "700" }}>
+                      Open Camera Scanner
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.openCameraBtn}
+                    onPress={() => setShowQRCode(true)}
+                  >
+                    <Text style={{ color: "#0f172a", fontWeight: "700" }}>
+                      Show QR
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               )
             ) : (
               <TouchableOpacity
@@ -190,8 +226,20 @@ export default function QRISModal({
               </TouchableOpacity>
             )}
           </View>
-          {(!BarcodeModule || hasPermission === false) && (
-            <TouchableOpacity style={styles.successBtn} onPress={onSuccess}>
+          {(__DEV__ || !BarcodeModule || hasPermission === false) && (
+            <TouchableOpacity
+              style={styles.successBtn}
+              onPress={async () => {
+                if (__DEV__) {
+                  // in dev, allow simulating a validated scan
+                  const res = await validatePayment(effectivePayload);
+                  if (res.ok) onSuccess();
+                  else alert(res.message || "Validation failed");
+                } else {
+                  onSuccess();
+                }
+              }}
+            >
               <Text style={{ color: "#fff", fontWeight: "700" }}>
                 Simulate Successful Scan
               </Text>

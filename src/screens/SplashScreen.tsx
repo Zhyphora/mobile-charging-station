@@ -1,6 +1,6 @@
 import React, { useEffect } from "react";
 import { View, Text, StyleSheet, Image, Animated, Easing } from "react-native";
-import ProgressBar from "./components/ProgressBar";
+import ProgressBar from "../components/ProgressBar";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 

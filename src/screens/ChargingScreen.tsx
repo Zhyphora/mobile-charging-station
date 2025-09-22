@@ -1,15 +1,39 @@
 import React from "react";
-import { View, Text, StyleSheet, TouchableOpacity } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Modal,
+  TextInput,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ProgressBar from "../components/ProgressBar";
 import ButtonCard from "../components/ButtonCard";
 import QRISModal from "../components/QRISModal";
+import useVehicle from "../hooks/useVehicle";
 
 const ChargingScreen: React.FC = () => {
+  // format numeric string to Indonesian Rupiah display, e.g. "50000" -> "Rp 50.000"
+  function formatRupiah(digits: string) {
+    const n = parseInt(digits || "0", 10) || 0;
+    return "Rp " + n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  }
+
+  function isValidAmount(digits: string) {
+    const n = parseInt(digits || "0", 10) || 0;
+    return n > 0;
+  }
+
   const [running, setRunning] = React.useState(false);
   const [progress, setProgress] = React.useState(0); // 0..1
   const [seconds, setSeconds] = React.useState(0);
   const [showScanner, setShowScanner] = React.useState(false);
+  const [showPostCharge, setShowPostCharge] = React.useState(false);
+  const [showManualEntry, setShowManualEntry] = React.useState(false);
+  const [manualAmount, setManualAmount] = React.useState("");
+
+  const { setBilling, markPaid } = useVehicle();
 
   const intervalRef = React.useRef<number | null>(null);
 
@@ -17,7 +41,15 @@ const ChargingScreen: React.FC = () => {
     if (running) {
       intervalRef.current = setInterval(() => {
         setSeconds((s) => s + 1);
-        setProgress((p) => Math.min(1, p + 0.01));
+        setProgress((p) => {
+          const next = Math.min(1, p + 0.01);
+          // when charging completes, show post-charge flow once
+          if (next >= 1) {
+            setShowPostCharge(true);
+            setRunning(false);
+          }
+          return next;
+        });
       }, 1000) as unknown as number;
     } else if (intervalRef.current) {
       clearInterval(intervalRef.current as unknown as number);
@@ -37,7 +69,7 @@ const ChargingScreen: React.FC = () => {
       setProgress(0);
       setSeconds(0);
       setRunning(false);
-      setShowScanner(true);
+      setShowPostCharge(true);
       return;
     }
     // require QRIS scan before starting if currently stopped
@@ -99,10 +131,109 @@ const ChargingScreen: React.FC = () => {
           })}
           onClose={() => setShowScanner(false)}
           onSuccess={() => {
+            // mark payment as done and start charging
             setShowScanner(false);
+            markPaid();
             setRunning(true);
           }}
         />
+
+        {/* Post-charge modal: show two CTAs */}
+        <Modal
+          visible={showPostCharge}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowPostCharge(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Text style={{ fontWeight: "700", fontSize: 18 }}>
+                Charging Complete
+              </Text>
+              <Text style={{ color: "#64748b", marginTop: 8 }}>
+                Pilih metode pembayaran:
+              </Text>
+
+              {!showManualEntry ? (
+                <View style={{ marginTop: 12 }}>
+                  <TouchableOpacity
+                    style={[
+                      styles.button,
+                      { backgroundColor: "#06b6d4", marginBottom: 10 },
+                    ]}
+                    onPress={() => {
+                      setShowPostCharge(false);
+                      setShowScanner(true);
+                    }}
+                  >
+                    <Text style={styles.buttonText}>Scan to Pay (QRIS)</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.button, { backgroundColor: "#fb923c" }]}
+                    onPress={() => setShowManualEntry(true)}
+                  >
+                    <Text style={styles.buttonText}>
+                      Enter Billing Manually
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={{ marginTop: 12 }}>
+                  <TextInput
+                    value={manualAmount}
+                    onChangeText={(text) => {
+                      // accept digits only, remove non-digits
+                      const digits = text.replace(/[^0-9]/g, "");
+                      setManualAmount(digits);
+                    }}
+                    placeholder="50000"
+                    keyboardType="numeric"
+                    style={{
+                      borderWidth: 1,
+                      borderColor: "#e2e8f0",
+                      padding: 10,
+                      borderRadius: 8,
+                      marginBottom: 10,
+                    }}
+                  />
+                  <Text style={{ marginBottom: 8, color: "#374151" }}>
+                    Preview:{" "}
+                    {manualAmount ? formatRupiah(manualAmount) : "Rp 0"}
+                  </Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.button,
+                      {
+                        backgroundColor: "#16a34a",
+                        opacity: isValidAmount(manualAmount) ? 1 : 0.5,
+                      },
+                    ]}
+                    disabled={!isValidAmount(manualAmount)}
+                    onPress={() => {
+                      // set billing and close
+                      setBilling({
+                        amount: formatRupiah(manualAmount),
+                        due: "--",
+                      });
+                      setShowManualEntry(false);
+                      setShowPostCharge(false);
+                    }}
+                  >
+                    <Text style={styles.buttonText}>Save Billing</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={{ marginTop: 12 }}
+                onPress={() => setShowPostCharge(false)}
+              >
+                <Text style={{ color: "#0f172a" }}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </View>
     </SafeAreaView>
   );
@@ -131,6 +262,18 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   buttonText: { color: "#fff", fontWeight: "700" },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    padding: 18,
+    borderRadius: 12,
+    width: "90%",
+  },
 });
 
 export default ChargingScreen;

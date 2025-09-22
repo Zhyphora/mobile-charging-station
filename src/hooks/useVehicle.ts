@@ -35,6 +35,11 @@ export default function useVehicle() {
     [billing]
   );
 
+  const setBillingExternal = React.useCallback(
+    (next: { amount: string; due: string }) => setBilling(next),
+    []
+  );
+
   return {
     odometer,
     mode,
@@ -44,5 +49,6 @@ export default function useVehicle() {
     billing,
     setMode: setModeExternal,
     markPaid,
+    setBilling: setBillingExternal,
   };
 }

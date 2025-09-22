@@ -14,7 +14,7 @@ import { useNavigation } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "react-native";
 import { Modal } from "react-native";
-import useVehicle from "./hooks/useVehicle";
+import useVehicle from "../hooks/useVehicle";
 
 const { width } = Dimensions.get("window");
 
@@ -92,7 +92,7 @@ const HomeScreen: React.FC = () => {
             </View>
             <View style={styles.rightCardInner}>
               <Image
-                source={require("../assets/motor_listrik_1.png")}
+                source={require("../../assets/motor_listrik_1.png")}
                 style={styles.bigMotor}
                 resizeMode="contain"
               />
