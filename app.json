@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Mobile Charging Station",
+    "slug": "mobile-charging-station",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "sdkVersion": "54.0.0",
+    "jsEngine": "hermes",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "userInterfaceStyle": "automatic",
+    "extra": {
+      "eas": {
+        "projectId": "50db968a-2697-4851-b7ad-3aa106d75684"
+      }
+    },
+    "android": {
+      "package": "com.dhanuwrdhn.mobilechargingstation"
+    }
+  }
+}
