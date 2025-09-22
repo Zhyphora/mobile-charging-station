@@ -26,10 +26,13 @@ const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
     ).start();
   }, []);
 
-  const rotate = logoSpin.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
+  const rotate =
+    logoSpin && typeof logoSpin.interpolate === "function"
+      ? logoSpin.interpolate({
+          inputRange: [0, 1],
+          outputRange: ["0deg", "360deg"],
+        })
+      : "0deg";
 
   useEffect(() => {
     // Animasi scaling saat komponen dimuat

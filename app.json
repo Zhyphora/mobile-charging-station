@@ -21,6 +21,9 @@
     },
     "android": {
       "package": "com.dhanuwrdhn.mobilechargingstation"
-    }
+    },
+    "plugins": [
+      "expo-barcode-scanner"
+    ]
   }
 }
