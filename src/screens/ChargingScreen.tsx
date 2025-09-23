@@ -6,11 +6,15 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
+  NativeModules,
+  Linking,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import ProgressBar from "../components/ProgressBar";
 import ButtonCard from "../components/ButtonCard";
-import QRISModal from "../components/QRISModal";
+// QRISModal removed; we'll inline scanner logic to attach billing to account
+import { validatePayment } from "../services/payments";
+import ScannerModal from "../components/ScannerModal";
 import useVehicle from "../hooks/useVehicle";
 
 const ChargingScreen: React.FC = () => {
@@ -74,11 +78,14 @@ const ChargingScreen: React.FC = () => {
     }
     // require QRIS scan before starting if currently stopped
     if (!running) {
+      // open scanner modal
       setShowScanner(true);
       return;
     }
     setRunning((r) => !r);
   };
+
+  // scanner flow is handled by ScannerModal component
 
   const stop = () => {
     setRunning(false);
@@ -116,24 +123,24 @@ const ChargingScreen: React.FC = () => {
           subtitle={
             running
               ? "Charging in progress"
-              : "Tap to pay (QRIS) before charging"
+              : "Tap to scan QR code before charging"
           }
           onPress={toggle}
           style={{ marginTop: 18, width: "100%" }}
         />
 
-        <QRISModal
+        <ScannerModal
           visible={showScanner}
-          payload={JSON.stringify({
-            amount: 200000,
-            currency: "IDR",
-            invoice: "INV-20250922-01",
-          })}
           onClose={() => setShowScanner(false)}
-          onSuccess={() => {
-            // mark payment as done and start charging
-            setShowScanner(false);
+          onSuccess={(res) => {
+            // format amount and attach to account, then start charging
+            const amount = res.data?.amount || 0;
+            setBilling({
+              amount: formatRupiah(String(amount)),
+              due: new Date().toLocaleDateString(),
+            });
             markPaid();
+            setShowScanner(false);
             setRunning(true);
           }}
         />

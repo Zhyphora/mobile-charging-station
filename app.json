@@ -4,15 +4,10 @@
     "slug": "mobile-charging-station",
     "version": "1.0.0",
     "orientation": "portrait",
-    "platforms": [
-      "ios",
-      "android"
-    ],
+    "platforms": ["ios", "android"],
     "sdkVersion": "54.0.0",
     "jsEngine": "hermes",
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "userInterfaceStyle": "automatic",
     "extra": {
       "eas": {
@@ -22,8 +17,6 @@
     "android": {
       "package": "com.dhanuwrdhn.mobilechargingstation"
     },
-    "plugins": [
-      "expo-barcode-scanner"
-    ]
+    "plugins": ["expo-camera"]
   }
 }
