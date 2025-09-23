@@ -13,7 +13,8 @@ import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "react-native";
-import { Modal } from "react-native";
+import { Modal, RefreshControl } from "react-native";
+import BatteryUsageChart from "../components/BatteryUsageChart";
 import useVehicle from "../hooks/useVehicle";
 
 const { width } = Dimensions.get("window");
@@ -37,570 +38,654 @@ const HomeScreen: React.FC = () => {
   // helper to pick color based on status text
   function colorFor(status: string) {
     const s = (status || "").toLowerCase();
-    if (s.includes("normal") || s.includes("ok")) return "#22c55e"; // green
-    if (s.includes("high") || s.includes("over")) return "#ef4444"; // red
-    return "#334155";
+    if (s.includes("normal") || s.includes("ok")) return "#10b981"; // emerald-500
+    if (s.includes("high") || s.includes("over")) return "#ef4444"; // red-500
+    return "#6b7280"; // gray-500
   }
 
   const onStartCharging = () => navigation.navigate("Charge");
-  const scale = React.useRef(new Animated.Value(1)).current;
-  const onPressIn = () => {
-    try {
-      if (scale && typeof (Animated as any).spring === "function") {
-        Animated.spring(scale, {
-          toValue: 0.96,
-          useNativeDriver: true,
-        }).start();
-      }
-    } catch (e) {
-      // ignore animation errors in environments without Animated
-    }
-  };
-  const onPressOut = () => {
-    try {
-      if (scale && typeof (Animated as any).spring === "function") {
-        Animated.spring(scale, {
-          toValue: 1,
-          friction: 3,
-          useNativeDriver: true,
-        }).start();
-      }
-    } catch (e) {
-      // ignore animation errors in environments without Animated
-    }
-  };
+
+  // battery history for usage chart (sample recent values)
+  const [batteryHistory, setBatteryHistory] = React.useState<
+    { t: number; pct: number; odo: number }[]
+  >(() => [{ t: Date.now(), pct: batteryPercent, odo: odometer }]);
+
+  // animated value for battery fill
+  const batteryAnim = React.useRef(new Animated.Value(batteryPercent)).current;
+
+  React.useEffect(() => {
+    // animate battery fill when batteryPercent changes
+    Animated.timing(batteryAnim, {
+      toValue: batteryPercent,
+      duration: 600,
+      useNativeDriver: false,
+    }).start();
+  }, [batteryPercent, batteryAnim]);
+
+  // confirm modal for Charge Now CTA
+  const [showChargeConfirm, setShowChargeConfirm] = React.useState(false);
+
+  // tooltip state for chart bars
+  const [tooltipEntry, setTooltipEntry] = React.useState<{
+    t: number;
+    pct: number;
+    odo: number;
+  } | null>(null);
+
+  // pull-to-refresh
+  const [refreshing, setRefreshing] = React.useState(false);
+  const onRefresh = React.useCallback(() => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 800);
+  }, []);
+
+  // animated values for chart bars
+  const barAnimsRef = React.useRef<Animated.Value[]>([]);
+
+  React.useEffect(() => {
+    // push latest sample into history, keep last 12 samples
+    setBatteryHistory((h) => {
+      const next = [
+        ...h.slice(-11),
+        { t: Date.now(), pct: batteryPercent, odo: odometer },
+      ];
+      barAnimsRef.current = next.map(
+        (entry, i) => barAnimsRef.current[i] || new Animated.Value(entry.pct)
+      );
+      Animated.stagger(
+        40,
+        barAnimsRef.current.map((av, i) =>
+          Animated.timing(av, {
+            toValue: next[i].pct,
+            duration: 500,
+            useNativeDriver: false,
+          })
+        )
+      ).start();
+      return next;
+    });
+  }, [batteryPercent, odometer]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={["top", "left", "right"]}>
-      <StatusBar barStyle="dark-content" hidden={false} />
-      <ScrollView contentContainerStyle={styles.containerDashboard}>
-        <View style={styles.headerRow}>
-          <Text style={styles.welcome}>
-            Welcome, <Text style={{ color: "#fb923c" }}>Dhanu</Text>
-          </Text>
-          <TouchableOpacity>
-            <Ionicons name="notifications-outline" size={24} color="#0f172a" />
-          </TouchableOpacity>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+
+      {/* Header */}
+      <View style={styles.header}>
+        <View>
+          <Text style={styles.greeting}>Good Morning</Text>
+          <Text style={styles.userName}>Dhanu</Text>
+        </View>
+        <TouchableOpacity style={styles.notificationButton}>
+          <Ionicons name="notifications-outline" size={24} color="#374151" />
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
+        {/* Vehicle Overview Card */}
+        <View style={styles.vehicleCard}>
+          <View style={styles.vehicleInfo}>
+            <Text style={styles.odometerLabel}>Total Distance</Text>
+            <Text style={styles.odometerValue}>{odometer}</Text>
+            <Text style={styles.odometerUnit}>Kilometers</Text>
+          </View>
+          <View style={styles.vehicleImageContainer}>
+            <Image
+              source={require("../../assets/motor_listrik_1.png")}
+              style={styles.vehicleImage}
+              resizeMode="contain"
+            />
+          </View>
         </View>
 
-        <View style={styles.cardContainer}>
-          <View style={styles.cardInnerRow}>
-            <View style={styles.leftCardInner}>
-              <Text style={styles.odometerLabel}>Odometer</Text>
-              <Text style={styles.odometerValue}>{odometer}</Text>
-              <Text style={styles.odometerUnit}>KM</Text>
+        {/* Stats Grid */}
+        <View style={styles.statsGrid}>
+          {/* Battery Card */}
+          <View style={styles.statCard}>
+            <View style={styles.statHeader}>
+              <View
+                style={[styles.iconContainer, { backgroundColor: "#dcfce7" }]}
+              >
+                <Ionicons name="battery-charging" size={20} color="#16a34a" />
+              </View>
+              <Text style={styles.statTitle}>Battery</Text>
             </View>
-            <View style={styles.rightCardInner}>
-              <Image
-                source={require("../../assets/motor_listrik_1.png")}
-                style={styles.bigMotor}
-                resizeMode="contain"
+            <Text style={styles.statValue}>{batteryPercent}%</Text>
+            <Text style={styles.statSubtitle}>{batteryRange} remaining</Text>
+
+            <View style={styles.progressBar}>
+              <Animated.View
+                style={[
+                  styles.progressFill,
+                  {
+                    width: batteryAnim.interpolate({
+                      inputRange: [0, 100],
+                      outputRange: ["0%", "100%"],
+                    }),
+                    backgroundColor:
+                      batteryPercent <= 20 ? "#ef4444" : "#16a34a",
+                  },
+                ]}
               />
             </View>
-          </View>
-        </View>
 
-        <View style={styles.infoRow}>
-          <View style={[styles.infoCard, styles.modeCard]}>
-            <Text style={styles.infoTitle}>Mode</Text>
-            <View style={styles.modeRow}>
-              <View style={styles.modePill}>
-                <Text style={styles.modePillText}>{mode}</Text>
-              </View>
-              <Text style={styles.modeDesc}>Recommended for performance</Text>
-            </View>
-          </View>
-
-          <View style={[styles.infoCard, styles.batteryCard]}>
-            <Text style={styles.infoTitle}>Battery</Text>
-            <View style={styles.batteryRow}>
-              <View style={styles.batteryLeft}>
-                <Text style={styles.batteryPercent}>{batteryPercent}%</Text>
-                <Text style={styles.batteryRange}>est {batteryRange} left</Text>
-              </View>
-              <View style={styles.batteryProgressWrap}>
-                <View style={styles.batteryTrack}>
-                  <View
-                    style={[
-                      styles.batteryFill,
-                      {
-                        width: `${Math.max(0, Math.min(100, batteryPercent))}%`,
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.tempCard}>
-          <Text style={styles.infoTitle}>Temperature</Text>
-          <View style={styles.tempRowContainer}>
-            <View style={styles.tempIconBox}>
-              <Ionicons name="thermometer-outline" size={34} color="#ef4444" />
-            </View>
-            <View style={styles.tempList}>
-              <View style={styles.tempRow}>
-                <Text style={styles.tempLabel}>Motor</Text>
-                <Text
-                  style={[styles.tempStatus, { color: colorFor(temps.motor) }]}
-                >
-                  {temps.motor}
-                </Text>
-              </View>
-              <View style={styles.tempRow}>
-                <Text style={styles.tempLabel}>Inverter</Text>
-                <Text
-                  style={[
-                    styles.tempStatus,
-                    { color: colorFor(temps.inverter) },
-                  ]}
-                >
-                  {temps.inverter}
-                </Text>
-              </View>
-              <View style={styles.tempRow}>
-                <Text style={styles.tempLabel}>Battery</Text>
-                <Text
-                  style={[
-                    styles.tempStatus,
-                    { color: colorFor(temps.battery) },
-                  ]}
-                >
-                  {temps.battery}
-                </Text>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.billStrip}>
-          <View>
-            <Text style={{ fontWeight: "700" }}>Total Billing</Text>
-            <Text>{billing.amount}</Text>
-            <Text style={{ color: "#64748b" }}>Due Date : {billing.due}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.payButton}
-            activeOpacity={0.85}
-            onPress={() => setShowPayModal(true)}
-          >
-            <Text style={{ color: "#fff", fontWeight: "700" }}>Pay</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Payment Modal */}
-        <Modal
-          visible={showPayModal}
-          transparent
-          animationType="slide"
-          onRequestClose={() => setShowPayModal(false)}
-        >
-          <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              <Text style={{ fontWeight: "700", fontSize: 18 }}>
-                Pay Billing
-              </Text>
-              <Text style={{ marginTop: 8 }}>{billing.amount}</Text>
-              <Text style={{ color: "#64748b", marginBottom: 14 }}>
-                Due Date: {billing.due}
-              </Text>
+            {batteryPercent <= 20 && (
               <TouchableOpacity
-                style={styles.payConfirmButton}
+                style={styles.chargeButton}
+                onPress={() => setShowChargeConfirm(true)}
+              >
+                <Text style={styles.chargeButtonText}>Charge Now</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {/* Billing Card */}
+          <View style={styles.statCard}>
+            <View style={styles.statHeader}>
+              <View
+                style={[styles.iconContainer, { backgroundColor: "#fef3c7" }]}
+              >
+                <Ionicons name="card" size={20} color="#d97706" />
+              </View>
+              <Text style={styles.statTitle}>Billing</Text>
+            </View>
+            <Text style={styles.statValue}>{billing.amount}</Text>
+            <Text style={styles.statSubtitle}>Due {billing.due}</Text>
+
+            <TouchableOpacity
+              style={styles.payButton}
+              onPress={() => setShowPayModal(true)}
+            >
+              <Text style={styles.payButtonText}>Pay Now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Temperature Status */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>System Temperature</Text>
+
+          <View style={styles.tempGrid}>
+            <View style={styles.tempItem}>
+              <View
+                style={[
+                  styles.tempIcon,
+                  { backgroundColor: colorFor(temps.motor) + "15" },
+                ]}
+              >
+                <Ionicons
+                  name="speedometer"
+                  size={18}
+                  color={colorFor(temps.motor)}
+                />
+              </View>
+              <Text style={styles.tempLabel}>Motor</Text>
+              <Text
+                style={[styles.tempValue, { color: colorFor(temps.motor) }]}
+              >
+                {temps.motor}
+              </Text>
+            </View>
+
+            <View style={styles.tempItem}>
+              <View
+                style={[
+                  styles.tempIcon,
+                  { backgroundColor: colorFor(temps.inverter) + "15" },
+                ]}
+              >
+                <Ionicons
+                  name="flash"
+                  size={18}
+                  color={colorFor(temps.inverter)}
+                />
+              </View>
+              <Text style={styles.tempLabel}>Inverter</Text>
+              <Text
+                style={[styles.tempValue, { color: colorFor(temps.inverter) }]}
+              >
+                {temps.inverter}
+              </Text>
+            </View>
+
+            <View style={styles.tempItem}>
+              <View
+                style={[
+                  styles.tempIcon,
+                  { backgroundColor: colorFor(temps.battery) + "15" },
+                ]}
+              >
+                <Ionicons
+                  name="battery-full"
+                  size={18}
+                  color={colorFor(temps.battery)}
+                />
+              </View>
+              <Text style={styles.tempLabel}>Battery</Text>
+              <Text
+                style={[styles.tempValue, { color: colorFor(temps.battery) }]}
+              >
+                {temps.battery}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Usage Chart */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>Battery Usage</Text>
+          <BatteryUsageChart
+            data={batteryHistory}
+            barAnims={barAnimsRef.current}
+            onBarPress={(e) => setTooltipEntry(e)}
+          />
+        </View>
+      </ScrollView>
+
+      {/* Payment Modal */}
+      <Modal
+        visible={showPayModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowPayModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Payment Confirmation</Text>
+            <Text style={styles.modalAmount}>{billing.amount}</Text>
+            <Text style={styles.modalDue}>Due Date: {billing.due}</Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
                 onPress={() => {
-                  // mark as paid via hook (simulation)
                   markPaid();
                   setShowPayModal(false);
                 }}
               >
-                <Text style={{ color: "#fff", fontWeight: "700" }}>
-                  Confirm Payment
-                </Text>
+                <Text style={styles.confirmButtonText}>Confirm Payment</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={{ marginTop: 12 }}
+                style={[styles.modalButton, styles.cancelButton]}
                 onPress={() => setShowPayModal(false)}
               >
-                <Text style={{ color: "#0f172a" }}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>Cancel</Text>
               </TouchableOpacity>
             </View>
           </View>
-        </Modal>
-      </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Charge Confirmation Modal */}
+      <Modal
+        visible={showChargeConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowChargeConfirm(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalTitle}>Low Battery Warning</Text>
+            <Text style={styles.modalMessage}>
+              Battery is below 20%. Would you like to start charging now?
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.confirmButton]}
+                onPress={() => {
+                  setShowChargeConfirm(false);
+                  navigation.navigate("Charge");
+                }}
+              >
+                <Text style={styles.confirmButtonText}>Start Charging</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => setShowChargeConfirm(false)}
+              >
+                <Text style={styles.cancelButtonText}>Later</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  // Layout & Container Styles
-  safe: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#fff",
-  },
-  containerDashboard: {
-    flexGrow: 1,
-    padding: 14,
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#f9fafb",
   },
 
-  headerRow: {
+  // Header
+  header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 6,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: "#ffffff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f3f4f6",
   },
 
-  topRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 6,
-  },
-  cardContainer: {
-    marginTop: 6,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 12,
-    // shadow for card
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 6,
+  greeting: {
+    fontSize: 14,
+    color: "#6b7280",
+    fontWeight: "400",
   },
 
-  cardInnerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  leftCardInner: {
-    flex: 1,
-    paddingRight: 8,
-    alignItems: "flex-start",
-  },
-
-  rightCardInner: {
-    width: width * 0.48,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  // Welcome Section
-  welcome: {
-    fontSize: 18,
+  userName: {
+    fontSize: 20,
     fontWeight: "700",
-    marginBottom: 8,
-    color: "#0f172a",
+    color: "#111827",
+    marginTop: 2,
   },
 
-  // Odometer Section
-  topCenter: {
+  notificationButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#f9fafb",
+    justifyContent: "center",
     alignItems: "center",
-    marginTop: 6,
   },
+
+  // ScrollView
+  scrollView: {
+    flex: 1,
+  },
+
+  scrollContent: {
+    padding: 20,
+    paddingBottom: 100,
+  },
+
+  // Vehicle Card
+  vehicleCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 24,
+    marginBottom: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+
+  vehicleInfo: {
+    flex: 1,
+  },
+
   odometerLabel: {
-    color: "#64748b",
+    fontSize: 14,
+    color: "#6b7280",
+    fontWeight: "500",
+    marginBottom: 4,
   },
+
   odometerValue: {
-    fontSize: 48,
+    fontSize: 32,
     fontWeight: "800",
-    color: "#0f172a",
+    color: "#111827",
+    marginBottom: 2,
   },
+
   odometerUnit: {
-    color: "#64748b",
+    fontSize: 14,
+    color: "#9ca3af",
+    fontWeight: "400",
   },
 
-  // Motor Image Section
-  bigMotorWrap: {
+  vehicleImageContainer: {
+    width: width * 0.35,
+    height: 80,
+    justifyContent: "center",
     alignItems: "center",
-    marginTop: 8,
-  },
-  bigMotor: {
-    width: width * 0.44,
-    height: width * 0.26,
   },
 
-  // Info Cards Section
-  infoRow: {
+  vehicleImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  // Stats Grid
+  statsGrid: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 16,
+    gap: 12,
+    marginBottom: 20,
   },
-  infoCard: {
-    flexBasis: "48%",
-    backgroundColor: "#fff",
-    padding: 12,
-    marginHorizontal: 4,
-    borderRadius: 10,
+
+  statCard: {
+    flex: 1,
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  modeCard: {
-    backgroundColor: "#f8fafc",
-  },
-  modeRow: {
+
+  statHeader: {
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: 16,
   },
-  modePill: {
-    backgroundColor: "#0f172a",
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 20,
+
+  iconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
     marginRight: 8,
   },
-  modePillText: {
-    color: "#fff",
-    fontWeight: "700",
+
+  statTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#374151",
   },
-  modeDesc: {
-    color: "#64748b",
-    fontSize: 12,
-  },
-  batteryCard: {
-    backgroundColor: "#fff",
-  },
-  batteryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  batteryLeft: {
-    flex: 1,
-  },
-  batteryPercent: {
+
+  statValue: {
     fontSize: 24,
     fontWeight: "800",
-    color: "#0f172a",
+    color: "#111827",
+    marginBottom: 4,
   },
-  batteryRange: {
-    color: "#64748b",
+
+  statSubtitle: {
     fontSize: 12,
+    color: "#6b7280",
+    marginBottom: 16,
   },
-  batteryProgressWrap: {
-    width: 110,
-    paddingLeft: 8,
-  },
-  batteryTrack: {
-    height: 12,
-    backgroundColor: "#e2e8f0",
-    borderRadius: 8,
+
+  // Progress Bar
+  progressBar: {
+    height: 6,
+    backgroundColor: "#f3f4f6",
+    borderRadius: 3,
+    marginBottom: 12,
     overflow: "hidden",
   },
-  batteryFill: {
+
+  progressFill: {
     height: "100%",
-    backgroundColor: "#34d399",
-  },
-  infoTitle: {
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  infoInnerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  infoValue: {
-    color: "#0f172a",
-  },
-
-  // Mode Circle
-  modeCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#f97316",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 10,
-  },
-
-  // Battery Icon
-  batteryIcon: {
-    width: 18,
-    height: 24,
-    backgroundColor: "#a3e635",
-    marginRight: 10,
     borderRadius: 3,
   },
 
-  // Temperature Card
-  tempCard: {
-    marginTop: 12,
-    backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 10,
-  },
-
-  // Billing Section
-  billStrip: {
-    marginTop: 14,
-    backgroundColor: "#fff",
-    padding: 12,
-    borderRadius: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  payButton: {
-    backgroundColor: "#fb923c",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+  // Buttons
+  chargeButton: {
+    backgroundColor: "#ef4444",
     borderRadius: 8,
-  },
-
-  // Greeting Card
-  greetingCard: {
-    backgroundColor: "#f6f9ff",
-    padding: 20,
-    borderRadius: 12,
-  },
-  greetingText: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: "#0f172a",
-  },
-  greetingSub: {
-    marginTop: 6,
-    color: "#334155",
-  },
-
-  // Motor Section
-  motorWrapper: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 24,
-  },
-  motorImage: {
-    width: Math.min(width - 80, 520),
-    height: undefined,
-    aspectRatio: 16 / 9,
-  },
-
-  // CTA Button
-  ctaButton: {
-    marginTop: 18,
-    backgroundColor: "#0f172a",
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    borderRadius: 12,
-  },
-  ctaText: {
-    color: "#fff",
-    fontWeight: "700",
-    fontSize: 16,
-  },
-
-  // Banner Section
-  bannerContainer: {
-    marginTop: 18,
-  },
-  bannerScroll: {
-    height: 140,
-  },
-  bannerImage: {
-    width: width - 40,
-    height: 140,
-    borderRadius: 10,
-  },
-  dotsRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 8,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginHorizontal: 6,
-    backgroundColor: "#cbd5e1",
-  },
-  dotActive: {
-    backgroundColor: "#0f172a",
-  },
-
-  // Motor Card
-  motorCard: {
-    marginTop: 18,
-    borderRadius: 12,
-    backgroundColor: "#fff",
-    overflow: "hidden",
-  },
-  motorCardImage: {
-    width: "100%",
-    height: 200,
-  },
-  plateBox: {
-    position: "absolute",
-    left: 14,
-    bottom: 14,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    paddingHorizontal: 12,
     paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignSelf: "flex-start",
+  },
+
+  chargeButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  payButton: {
+    backgroundColor: "#d97706",
     borderRadius: 8,
-  },
-  plateText: {
-    color: "#fff",
-    fontWeight: "700",
-  },
-  // Temperature layout
-  tempRowContainer: {
-    flexDirection: "row",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
     alignItems: "center",
-    marginTop: 8,
   },
-  tempIconBox: {
-    width: 56,
-    height: 56,
-    borderRadius: 8,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-    // subtle shadow
+
+  payButtonText: {
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+
+  // Section Cards
+  sectionCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 20,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     elevation: 2,
   },
-  tempList: {
-    flex: 1,
+
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#111827",
+    marginBottom: 16,
   },
-  tempRow: {
+
+  // Temperature Grid
+  tempGrid: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 4,
   },
+
+  tempItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+
+  tempIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+
   tempLabel: {
-    color: "#0f172a",
+    fontSize: 12,
+    color: "#6b7280",
+    fontWeight: "500",
+    marginBottom: 4,
   },
-  tempStatus: {
+
+  tempValue: {
+    fontSize: 14,
     fontWeight: "700",
   },
 
-  // Modal styles
-  modalContainer: {
+  // Modals
+  modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.35)",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    padding: 18,
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
-  },
-  payConfirmButton: {
-    backgroundColor: "#fb923c",
-    paddingVertical: 12,
-    borderRadius: 10,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
     alignItems: "center",
+    padding: 20,
+  },
+
+  modalContainer: {
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
+    padding: 24,
+    width: "100%",
+    maxWidth: 340,
+  },
+
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+    textAlign: "center",
+    marginBottom: 16,
+  },
+
+  modalAmount: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#d97706",
+    textAlign: "center",
+    marginBottom: 8,
+  },
+
+  modalDue: {
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+    marginBottom: 24,
+  },
+
+  modalMessage: {
+    fontSize: 14,
+    color: "#6b7280",
+    textAlign: "center",
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+
+  modalButtons: {
+    gap: 12,
+  },
+
+  modalButton: {
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+
+  confirmButton: {
+    backgroundColor: "#d97706",
+  },
+
+  confirmButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+
+  cancelButton: {
+    backgroundColor: "#f3f4f6",
+  },
+
+  cancelButtonText: {
+    color: "#6b7280",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });
 

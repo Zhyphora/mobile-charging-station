@@ -14,9 +14,13 @@ function CustomTabBarButton({ children, onPress }: any) {
     <TouchableOpacity
       style={styles.fabContainer}
       onPress={onPress}
-      activeOpacity={0.9}
+      activeOpacity={0.8}
     >
-      <View style={styles.fabButton}>{children}</View>
+      <View style={styles.fabButton}>
+        {children}
+        {/* Cutout effect */}
+        <View style={styles.fabCutout} />
+      </View>
     </TouchableOpacity>
   );
 }
@@ -40,18 +44,16 @@ export default function BottomTabs() {
         })}
       >
         <Tab.Screen name="Home" component={HomeScreen} />
-
         <Tab.Screen
           name="Charge"
           component={ChargingScreen}
           options={{
             tabBarIcon: ({ focused }) => (
-              <Ionicons name={"add" as any} size={28} color="#fff" />
+              <Ionicons name={"flash" as any} size={30} color="#fff" />
             ),
             tabBarButton: (props) => <CustomTabBarButton {...props} />,
           }}
         />
-
         <Tab.Screen name="Profile" component={ProfileScreen} />
       </Tab.Navigator>
     </NavigationContainer>
@@ -61,34 +63,80 @@ export default function BottomTabs() {
 const styles = StyleSheet.create({
   tabBar: {
     position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
     height: 64,
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderRadius: 16,
     backgroundColor: "#fff",
     paddingHorizontal: 24,
     justifyContent: "center",
     alignItems: "center",
+    // Add notch for FAB
     ...Platform.select({
       ios: {
         shadowColor: "#000",
-        shadowOffset: { width: 0, height: -8 },
-        shadowOpacity: 0.06,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.15,
         shadowRadius: 12,
       },
-      android: { elevation: 8 },
+      android: {
+        elevation: 12,
+      },
     }),
   },
+
   fabContainer: {
-    top: -28,
+    top: -32, // Moved up more to create separation
     justifyContent: "center",
     alignItems: "center",
+    zIndex: 10,
   },
+
   fabButton: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 68, // Slightly larger
+    height: 68,
+    borderRadius: 34,
     backgroundColor: "#fb923c",
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
+    // Enhanced shadow for floating effect
+    ...Platform.select({
+      ios: {
+        shadowColor: "#fb923c",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.4,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 12,
+      },
+    }),
+    // Add border for separation
+    borderWidth: 4,
+    borderColor: "#fff",
+  },
+
+  // Cutout effect to make it look like it's floating above the tab bar
+  fabCutout: {
+    position: "absolute",
+    bottom: -6,
+    width: 76,
+    height: 20,
+    backgroundColor: "transparent",
+    borderRadius: 38,
+    // Create the cutout shadow effect
+    ...Platform.select({
+      ios: {
+        shadowColor: "#fff",
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: -1,
+      },
+    }),
   },
 });
