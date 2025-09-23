@@ -17,6 +17,15 @@
     "android": {
       "package": "com.dhanuwrdhn.mobilechargingstation"
     },
-    "plugins": ["expo-camera"]
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to access your camera",
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone",
+          "recordAudioAndroid": true
+        }
+      ]
+    ]
   }
 }

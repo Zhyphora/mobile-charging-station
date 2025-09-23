@@ -34,10 +34,12 @@ const ChargingScreen: React.FC = () => {
   const [seconds, setSeconds] = React.useState(0);
   const [showScanner, setShowScanner] = React.useState(false);
   const [showPostCharge, setShowPostCharge] = React.useState(false);
+  const [showSuccess, setShowSuccess] = React.useState(false);
   const [showManualEntry, setShowManualEntry] = React.useState(false);
   const [manualAmount, setManualAmount] = React.useState("");
 
   const { setBilling, markPaid } = useVehicle();
+  const { billing } = useVehicle();
 
   const intervalRef = React.useRef<number | null>(null);
 
@@ -49,7 +51,9 @@ const ChargingScreen: React.FC = () => {
           const next = Math.min(1, p + 0.01);
           // when charging completes, show post-charge flow once
           if (next >= 1) {
+            // mark charging finished and show success modal
             setShowPostCharge(true);
+            setShowSuccess(true);
             setRunning(false);
           }
           return next;
@@ -237,6 +241,47 @@ const ChargingScreen: React.FC = () => {
                 onPress={() => setShowPostCharge(false)}
               >
                 <Text style={{ color: "#0f172a" }}>Close</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Success modal shown when charging finishes */}
+        <Modal
+          visible={showSuccess}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowSuccess(false)}
+        >
+          <View style={styles.modalContainer}>
+            <View style={[styles.modalContent, { alignItems: "center" }]}>
+              <Text style={{ fontWeight: "800", fontSize: 20 }}>
+                Motor kamu berhasil penuh 🎉
+              </Text>
+              <Text style={{ color: "#64748b", marginTop: 8 }}>
+                Tagihan telah masuk ke member kamu.
+              </Text>
+
+              <View style={{ marginTop: 14, alignItems: "center" }}>
+                <Text style={{ fontWeight: "700", fontSize: 18 }}>
+                  {billing?.amount || "Rp 0"}
+                </Text>
+                <Text style={{ color: "#64748b", marginTop: 6 }}>
+                  Jatuh tempo: {billing?.due || "--"}
+                </Text>
+              </View>
+
+              <TouchableOpacity
+                style={[
+                  styles.button,
+                  { backgroundColor: "#16a34a", marginTop: 16 },
+                ]}
+                onPress={() => {
+                  setShowSuccess(false);
+                  setShowPostCharge(false);
+                }}
+              >
+                <Text style={styles.buttonText}>Tutup</Text>
               </TouchableOpacity>
             </View>
           </View>

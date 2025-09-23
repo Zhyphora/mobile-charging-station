@@ -22,6 +22,16 @@ try {
   console.log("expo-camera not available in this build");
 }
 
+// Provide a safe fallback so we can call the hook unconditionally
+if (!useCameraPermissions) {
+  useCameraPermissions = () => {
+    // return [permission, requestPermission]
+    const perm = null;
+    const req = async () => perm;
+    return [perm, req];
+  };
+}
+
 type Props = {
   visible: boolean;
   onClose: () => void;
@@ -31,24 +41,45 @@ type Props = {
 
 export default function ScannerModal({ visible, onClose, onSuccess }: Props) {
   const [permission, setPermission] = React.useState<any>(null);
-  const [requestPermission, setRequestPermission] = React.useState<any>(null);
   const [scanned, setScanned] = React.useState(false);
-  const [cameraAvailable, setCameraAvailable] = React.useState(false);
+  const [cameraAvailable] = React.useState<boolean>(() => !!CameraView);
+
+  // Call the permission hook (either the real hook or the safe fallback)
+  const [perm, requestPermission] = useCameraPermissions();
 
   React.useEffect(() => {
-    if (visible) {
-      setScanned(false);
-      // Initialize camera permissions if available
-      if (useCameraPermissions) {
-        const [perm, reqPerm] = useCameraPermissions();
-        setPermission(perm);
-        setRequestPermission(() => reqPerm);
-        setCameraAvailable(true);
-      } else {
-        setCameraAvailable(false);
+    if (visible) setScanned(false);
+    // keep local permission state in sync with the hook
+    setPermission(perm);
+  }, [visible, perm]);
+
+  // When modal opens, if we have no permission or not granted, request it automatically
+  React.useEffect(() => {
+    let mounted = true;
+    if (visible && cameraAvailable) {
+      // if permission is null or not granted, request it
+      if (!perm || !perm.granted) {
+        // small debounce to avoid immediate double-calls
+        const t = setTimeout(() => {
+          if (!mounted) return;
+          try {
+            // requestPermission may be async
+            requestPermission && requestPermission();
+          } catch (e) {
+            // ignore
+            console.log("requestPermission failed", e);
+          }
+        }, 200);
+        return () => {
+          mounted = false;
+          clearTimeout(t);
+        };
       }
     }
-  }, [visible]);
+    return () => {
+      mounted = false;
+    };
+  }, [visible, cameraAvailable, perm, requestPermission]);
 
   const handleScanned = React.useCallback(
     async (e: any) => {
@@ -60,7 +91,7 @@ export default function ScannerModal({ visible, onClose, onSuccess }: Props) {
       if (res.ok) onSuccess(res);
       else {
         // eslint-disable-next-line no-alert
-        alert(res.message || "Validasi pembayaran gagal");
+        alert(res.message || "Member kamu tidak valid");
         setScanned(false);
       }
     },
@@ -86,7 +117,7 @@ export default function ScannerModal({ visible, onClose, onSuccess }: Props) {
         <View style={styles.card}>
           <Text style={styles.title}>Scan Member QR</Text>
           <Text style={styles.subtitle}>
-            Arahkan kamera ke QR member untuk mengisi saldo ke akun.
+            Arahkan kamera ke QR member untuk mengisi motor listrik.
           </Text>
 
           <View style={{ marginVertical: 12 }}>
@@ -95,7 +126,13 @@ export default function ScannerModal({ visible, onClose, onSuccess }: Props) {
                 <Text style={{ color: "#ef4444", textAlign: "center" }}>
                   Native camera tidak tersedia di Expo Go.
                 </Text>
-                <Text style={{ color: "#64748b", textAlign: "center", marginTop: 4 }}>
+                <Text
+                  style={{
+                    color: "#64748b",
+                    textAlign: "center",
+                    marginTop: 4,
+                  }}
+                >
                   Gunakan development build untuk menggunakan kamera.
                 </Text>
               </View>
@@ -118,7 +155,7 @@ export default function ScannerModal({ visible, onClose, onSuccess }: Props) {
                 style={{ width: 260, height: 260, borderRadius: 8 }}
                 facing="back"
                 barcodeScannerSettings={{
-                  barcodeTypes: ["qr", "pdf417"],
+                  barcodeTypes: ["qr"],
                 }}
                 onBarcodeScanned={scanned ? undefined : handleScanned}
               />
