@@ -63,13 +63,13 @@ export default function BottomTabs() {
 const styles = StyleSheet.create({
   tabBar: {
     position: "absolute",
-    bottom: 20,
+    bottom: 18,
     left: 20,
     right: 20,
-    height: 64,
+    height: 60,
     borderRadius: 16,
     backgroundColor: "#fff",
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     justifyContent: "center",
     alignItems: "center",
     // Add notch for FAB
@@ -87,16 +87,16 @@ const styles = StyleSheet.create({
   },
 
   fabContainer: {
-    top: -32, // Moved up more to create separation
+    top: -20, // lower the FAB so icon centers vertically in the tab bar
     justifyContent: "center",
     alignItems: "center",
     zIndex: 10,
   },
 
   fabButton: {
-    width: 68, // Slightly larger
-    height: 68,
-    borderRadius: 34,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     backgroundColor: "#fb923c",
     justifyContent: "center",
     alignItems: "center",
@@ -121,9 +121,9 @@ const styles = StyleSheet.create({
   // Cutout effect to make it look like it's floating above the tab bar
   fabCutout: {
     position: "absolute",
-    bottom: -6,
-    width: 76,
-    height: 20,
+    bottom: -4,
+    width: 72,
+    height: 18,
     backgroundColor: "transparent",
     borderRadius: 38,
     // Create the cutout shadow effect
